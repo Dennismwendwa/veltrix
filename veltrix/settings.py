@@ -30,7 +30,7 @@ INSTALLED_APPS = [
     "catalog",
     "inventory",
     #"orders",
-    #"purchasing",
+    "purchasing",
     #"sales",
 ]
 
@@ -70,7 +70,7 @@ WSGI_APPLICATION = 'veltrix.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/6.1/ref/settings/#databases
 
-
+"""
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
@@ -88,7 +88,7 @@ DATABASES = {
         'PORT': os.environ.get("DB_PORT"),
     }
 }
-"""
+
 
 # Password validation
 # https://docs.djangoproject.com/en/6.1/ref/settings/#auth-password-validators

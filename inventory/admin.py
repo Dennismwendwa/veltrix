@@ -13,6 +13,18 @@ class StockMovementAdmin(admin.ModelAdmin):
                     "unit_cost",
                     )
     list_filter = ("product", "warehouse", "movement_type",)
+    readonly_fields = (
+        "product", "warehouse", "movement_type", "quantity_delta",
+        "unit_cost", "reference_type", "reference_id",
+        "idempotency_key", "notes", "created_by",
+        "occurred_at", "created_at",
+    )
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False
 
 
 admin.site.register(StockBalance, StpckBalanceAdmin)
