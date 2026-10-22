@@ -25,10 +25,10 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    #"accounts",
-    #"core",
-    #"catalog",
-    #"inventory",
+    "accounts",
+    "core",
+    "catalog",
+    "inventory",
     #"orders",
     #"purchasing",
     #"sales",
@@ -133,7 +133,7 @@ STATICFILES_DIRS = [os.path.join(BASE_DIR, "static")]
 STATIC_ROOT = BASE_DIR / "staticfiles"
 STATICFILES_STORAGE = "whitenoise.storage.CompressedStaticFilesStorage"
 
-#AUTH_USER_MODEL = "accounts.User"
+AUTH_USER_MODEL = "accounts.User"
 
 #DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
