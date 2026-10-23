@@ -53,6 +53,7 @@ class OnlineOrderService:
         customer_name,
         customer_phone,
         items,
+        payment_option=OnlineOrder.PaymentOption.ONLINE,
         customer_email="",
         delivery_address="",
         delivery_instructions="",
@@ -75,6 +76,9 @@ class OnlineOrderService:
             raise ValidationError(
                 "A delivery address is required for delivery orders."
             )
+
+        if payment_option not in OnlineOrder.PaymentOption.values:
+            raise ValidationError("Invalid payment option.")
 
         # Return the existing order for a repeated checkout request.
         if idempotency_key:
@@ -102,7 +106,7 @@ class OnlineOrderService:
             raise ValidationError("The selected warehouse is unavailable.")
 
         if (
-            warehouse.type != Warehouse.Type.BRANCH
+            warehouse.warehouse_type != Warehouse.WarehouseType.BRANCH
             or warehouse.branch_id != branch.pk
         ):
             raise ValidationError(
@@ -152,6 +156,7 @@ class OnlineOrderService:
             delivery_instructions=delivery_instructions.strip(),
             requested_fulfilment_at=requested_fulfilment_at,
             idempotency_key=idempotency_key,
+            payment_option=payment_option,
         )
 
         subtotal = ZERO
@@ -392,6 +397,7 @@ class OnlineOrderService:
 
         return balances
 
+
     def _add_reservation(
         self,
         *,
@@ -401,58 +407,49 @@ class OnlineOrderService:
         quantity,
     ):
         """
-        Create or reactivate the reservation and update its stock balance
-        atomically. This model currently allows one reservation row per
-        order item and warehouse.
+        Increase the existing active reservation when one exists.
+        Otherwise, create a new reservation and preserve prior history.
         """
 
-        reservation, created = StockReservation.objects.get_or_create(
-            order_item=item,
-            warehouse=warehouse,
-            defaults={
-                "quantity": quantity,
-                "status": StockReservation.Status.ACTIVE,
-                "idempotency_key": (
-                    f"order-reservation:{item.order_id}:item:{item.pk}"
-                ),
-            },
-        )
+        if quantity <= ZERO_QTY:
+            raise ValidationError("Reservation quantity must be positive.")
 
-        if not created:
-            if reservation.status == StockReservation.Status.ACTIVE:
-                reservation.quantity += quantity
-            elif reservation.status in {
-                StockReservation.Status.RELEASED,
-                StockReservation.Status.EXPIRED,
-            }:
-                reservation.quantity = quantity
-                reservation.status = StockReservation.Status.ACTIVE
-                reservation.released_at = None
-                reservation.consumed_at = None
-            else:
-                raise ValidationError(
-                    "This order item has a reservation that cannot be reused."
-                )
-
-            reservation.save(update_fields=[
-                "quantity",
-                "status",
-                "released_at",
-                "consumed_at",
-                "updated_at",
-            ])
-
-        balance.quantity_reserved += quantity
-
-        if balance.quantity_reserved > balance.quantity_on_hand:
+        if balance.quantity_on_hand - balance.quantity_reserved < quantity:
             raise ValidationError(
-                "Reservation would exceed the stock available in the warehouse."
+                "Not enough available stock to create this reservation."
             )
 
+        reservation = (
+            StockReservation.objects.select_for_update()
+            .filter(
+                order_item=item,
+                warehouse=warehouse,
+                status=StockReservation.Status.ACTIVE,
+            )
+            .first()
+        )
+
+        if reservation:
+            reservation.quantity += quantity
+            reservation.save(update_fields=[
+                "quantity",
+                "updated_at",
+            ])
+        else:
+            reservation = StockReservation.objects.create(
+                order_item=item,
+                warehouse=warehouse,
+                quantity=quantity,
+                status=StockReservation.Status.ACTIVE,
+            )
+
+        balance.quantity_reserved += quantity
         balance.save(update_fields=[
             "quantity_reserved",
             "updated_at",
         ])
 
         return reservation
+
+
 
