@@ -5,6 +5,7 @@ from django.core.validators import MinValueValidator
 from django.db import models
 from django.db.models import Q
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 from catalog.models import Product
 from core.models import Branch, Warehouse
@@ -28,6 +29,10 @@ class OnlineOrder(models.Model):
         CANCELLED = "CANCELLED", "Cancelled"
         EXPIRED = "EXPIRED", "Expired"
 
+    class PaymentOption(models.TextChoices):
+        ONLINE = "ONLINE", "Pay online"
+        CASH_ON_COLLECTION = "CASH_ON_COLLECTION", "Cash on collection"
+        CASH_ON_DELIVERY = "CASH_ON_DELIVERY", "Cash on delivery"
     number = models.CharField(max_length=30, unique=True)
     status = models.CharField(
         max_length=24, choices=Status.choices,
@@ -79,6 +84,9 @@ class OnlineOrder(models.Model):
     placed_at = models.DateTimeField(null=True, blank=True)
     expires_at = models.DateTimeField(null=True, blank=True)
     completed_at = models.DateTimeField(null=True, blank=True)
+    payment_option = models.CharField(
+        max_length=24, choices=PaymentOption.choices,
+        default=PaymentOption.ONLINE, db_index=True)
 
     notes = models.TextField(blank=True)
 
@@ -120,16 +128,15 @@ class OnlineOrder(models.Model):
         if self.fulfilment_warehouse_id and self.fulfilment_branch_id:
             warehouse = self.fulfilment_warehouse
 
-            if warehouse.type != Warehouse.Type.BRANCH:
-                raise models.ValidationError(
-                    {
-                        "fulfilment_warehouse":
-                            "Online orders must be fulfilled from a branch warehouse."
-                    }
-                )
+            if warehouse.warehouse_type != Warehouse.WarehouseType.BRANCH:
+                raise ValidationError({
+                    "fulfilment_warehouse": (
+                        "Online orders must be fulfilled from a branch warehouse."
+                    )
+                })
 
             if warehouse.branch_id != self.fulfilment_branch_id:
-                raise models.ValidationError(
+                raise ValidationError(
                     {
                         "fulfilment_warehouse":
                             "The warehouse must belong to the fulfilment branch."
@@ -140,7 +147,7 @@ class OnlineOrder(models.Model):
             self.fulfilment_method == self.FulfilmentMethod.DELIVERY
             and not self.delivery_address.strip()
         ):
-            raise models.ValidationError(
+            raise ValidationError(
                 {"delivery_address": "A delivery address is required."}
             )
 
@@ -244,7 +251,8 @@ class StockReservation(models.Model):
         constraints = [
             models.UniqueConstraint(
                 fields=["order_item", "warehouse"],
-                name="unique_order_item_warehouse_reservation",
+                condition=Q(status="ACTIVE"),
+                name="unique_active_reservation_per_item_wh",
             ),
             models.CheckConstraint(
                 condition=Q(quantity__gt=0),
