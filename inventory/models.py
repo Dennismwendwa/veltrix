@@ -8,6 +8,17 @@ from django.utils import timezone
 from core.models import Warehouse
 from catalog.models import Product
 
+class TransferNumberSequence(models.Model):
+    """Database-backed sequence for stock transfer numbers."""
+
+    name = models.CharField(
+        max_length=30,
+        primary_key=True,
+    )
+    next_value = models.PositiveBigIntegerField(default=1)
+
+    def __str__(self):
+        return f"{self.name}: {self.next_value}"
 
 class StockBalance(models.Model):
     product = models.ForeignKey(
