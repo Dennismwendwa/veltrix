@@ -1,3 +1,4 @@
+from django.conf import settings
 from django.core.exceptions import ValidationError
 from django.db import models
 from django.db.models import Q
@@ -82,3 +83,45 @@ class Warehouse(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.get_warehouse_type_display()})"
+
+
+
+class BranchStaffAssignment(models.Model):
+    class Role(models.TextChoices):
+        MANAGER = "MANAGER", "Branch Manager"
+        WAREHOUSE = "WAREHOUSE", "Warehouse Staff"
+        SALES = "SALES", "Sales Staff"
+
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.PROTECT,
+        related_name="branch_assignments",
+    )
+    branch = models.ForeignKey(
+        Branch,
+        on_delete=models.PROTECT,
+        related_name="staff_assignments",
+    )
+    role = models.CharField(
+        max_length=20,
+        choices=Role.choices,
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "branch"],
+                name="unique_staff_assignment_per_branch",
+            ),
+        ]
+        indexes = [
+            models.Index(fields=["branch", "role", "is_active"]),
+            models.Index(fields=["user", "is_active"]),
+        ]
+
+    def __str__(self):
+        return f"{self.user} — {self.branch} ({self.role})"
+
+
