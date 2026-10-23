@@ -1,7 +1,10 @@
+from decimal import Decimal
+
 from django.core.exceptions import ValidationError
+from django.db.models import Q, Sum
 from django.db import transaction
 
-from orders.models import OnlineOrder
+from orders.models import OnlineOrder, StockReservation
 
 
 class FulfilmentWorkflowService:
@@ -28,6 +31,7 @@ class FulfilmentWorkflowService:
             raise ValidationError(
                 "Only processing orders can be marked ready for collection."
             )
+        self._ensure_fully_reserved(order)
 
         order.status = OnlineOrder.Status.READY_FOR_COLLECTION
         order.save(update_fields=["status", "updated_at"])
@@ -58,6 +62,7 @@ class FulfilmentWorkflowService:
             raise ValidationError(
                 "A delivery address is required before dispatch."
             )
+        self._ensure_fully_reserved(order)
 
         order.status = OnlineOrder.Status.OUT_FOR_DELIVERY
         order.save(update_fields=["status", "updated_at"])
@@ -96,4 +101,40 @@ class FulfilmentWorkflowService:
             )
         except OnlineOrder.DoesNotExist:
             raise ValidationError("The online order does not exist.")
+
+    @staticmethod
+    def _ensure_fully_reserved(order):
+        """
+        Ensure every ordered item has sufficient active reservations
+        at the order's assigned fulfilment warehouse.
+        """
+        items = order.items.annotate(
+            reserved_quantity=Sum(
+                "reservations__quantity",
+                filter=Q(
+                    reservations__status=StockReservation.Status.ACTIVE,
+                    reservations__warehouse_id=order.fulfilment_warehouse_id,
+                ),
+            )
+        )
+
+        shortages = []
+
+        for item in items:
+            reserved = item.reserved_quantity or Decimal("0.000")
+            outstanding = item.quantity - reserved
+
+            if outstanding > 0:
+                shortages.append(
+                    f"{item.product_name_snapshot}: "
+                    f"{outstanding} still needs reserving"
+                )
+
+        if shortages:
+            raise ValidationError(
+                "This order cannot proceed because some items are "
+                "not fully reserved at the fulfilment warehouse. "
+                + "; ".join(shortages)
+            )
+
 
