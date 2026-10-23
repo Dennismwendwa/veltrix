@@ -6,6 +6,9 @@ from django.db import transaction
 from django.db.models import Sum
 from django.utils import timezone
 
+from inventory.utils.transfer_numbers import (
+    generate_transfer_number,
+)
 from inventory.models import (
     StockBalance,
     StockMovement,
